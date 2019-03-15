@@ -19,7 +19,7 @@ red = praw.Reddit(
 )
 post_images, repost_images = [],[]
 with open('posts.txt', 'a+') as f:
-    for post in red.subreddit("popular").hot(limit=500):
+    for post in red.subreddit("popular").new(limit=500):
         try:
             response = requests.head(post.url)
             type = response.headers.get('content-type')
@@ -30,26 +30,33 @@ with open('posts.txt', 'a+') as f:
                 if len(search) == 0:
                     """ print("0 search results found.") """
                 for search_result in search:
-                    if search_result.score > 0.50:
+                    if search_result.score > 0.90:
                         found = True
+                        if search_result.url == post.url:
+                            print("Already in DB")
+                        else:
+                            post.reply(
+                                       """
+                                       **General Reposti!**
+                                       I thought it was similar to this: {}. But I'm just a bot. I could be wrong.
+                                       """.format(search_result.url))
+                            print("General Reposti")
                 if not found:
                     post_images.append(post.url)
                     print(post.url)
+                    app.inputs.create_image(ClImage(url=post.url))
                     f.write(post.url+"\n")
-                else:
-                    print("General Reposti")
-                f.close()
         except Exception as e:
             print(e)
-image_count = 0
-batch_size = 32
-counter = 0
-current_batch = 0
-with open("posts.txt") as f:
-    images = [url.strip() for url in f]
-    image_count = len(images)
+    f.close()
+batch_size = round(len(post_images/10))
+current_batch, counter, image_count = [0]*3
+images = [url.strip() for url in post_images]
+image_count = len(post_images)
+
+# I'll admit... this next part was fetched from the Clarifai documentation
+"""
 while counter < image_count:
-    print("Processing batch: #", (current_batch+1))
     imageList = []
 
     for current_index in range(counter, counter+batch_size - 1):
@@ -61,9 +68,6 @@ while counter < image_count:
     app.inputs.bulk_create_images(imageList)
 
     counter = counter + batch_size
-    current_batch = current_batch + 1
-
-
-# Check Visual Similarities
-
-# Search using a URL
+    current_batch += 1
+red.__exit__()
+"""
