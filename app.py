@@ -3,7 +3,7 @@ from config import credentials as cred
 import requests
 from clarifai.rest import Image as ClImage
 from clarifai.rest import ClarifaiApp
-import praw, time
+import praw, time, prawcore, pickle, datetime
 
 
 app = ClarifaiApp(api_key=cred["api_key"])
@@ -15,16 +15,62 @@ red = praw.Reddit(
     client_id=cred["client_id"],
     client_secret=cred["client_secret"],
     user_agent=cred["user_agent"]
-
 )
-post_images, repost_images = [],[]
-with open('posts.txt', 'a+') as f:
-    for post in red.subreddit("popular").new(limit=500):
+
+
+def reddit_url(s):
+    return "https://www.reddit.com/" + s
+
+
+post_images, repost_images = [], []
+
+with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
+    '''
+    
+    
+        Sense a disturbance in Reddit, I have
+                        ____
+                     _.' :  `._
+                 .-.'`.  ;   .'`.-.
+        __      / : ___\ ;  /___ ; \      __
+      ,'_ ""--.:__;".-.";: :".-.":__;.--"" _`,
+      :' `.t""--.. '<@.`;_  ',@>` ..--""j.' `;
+           `:-.._J '-.-'L__ `-- ' L_..-;'
+             "-.__ ;  .-"  "-.  : __.-"
+                 L ' /.------.\ ' J
+                  "-.   "--"   .-"
+                 __.l"-:_JL_;-";.__
+              .-j/'.;  ;""""  / .'\"-.
+            .' /:`. "-.:     .-" .';  `.
+         .-"  / ;  "-. "-..-" .-"  :    "-.
+      .+"-.  : :      "-.__.-"      ;-._   \
+      ; \  `.; ;                    : : "+. ;
+      :  ;   ; ;                    : ;  : \:
+     : `."-; ;  ;                  :  ;   ,/;
+      ;    -: ;  :                ;  : .-"'  :
+      :\     \  : ;             : \.-"      :
+       ;`.    \  ; :            ;.'_..--  / ;
+       :  "-.  "-:  ;          :/."      .'  :
+         \       .-`.\        /t-""  ":-+.   :
+          `.  .-"    `l    __/ /`. :  ; ; \  ;
+            \   .-" .-"-.-"  .' .'j \  /   ;/
+             \ / .-"   /.     .'.' ;_:'    ;
+              :-""-.`./-.'     /    `.___.'
+                    \ `t  ._  /  bug :F_P:
+                     "-.t-._:'
+        
+    
+    
+    
+    
+    '''
+    for post in red.subreddit(input("Subreddit:: ")).new(limit=int(input("Amount :: "))):
+        """
+        Meme this all you want but a lot of things can go wrong... that's why everything's surrounded by the try/catch block
+        """
         try:
             response = requests.head(post.url)
-            type = response.headers.get('content-type')
-            similar = False
-            if not similar and "image" in type:
+            if "image" in response.headers.get('content-type'):
                 found = False
                 search = app.inputs.search_by_image(url=post.url)
                 if len(search) == 0:
@@ -35,39 +81,47 @@ with open('posts.txt', 'a+') as f:
                         if search_result.url == post.url:
                             print("Already in DB")
                         else:
-                            post.reply(
-                                       """
-                                       **General Reposti!**
-                                       I thought it was similar to this: {}. But I'm just a bot. I could be wrong.
-                                       """.format(search_result.url))
-                            print("General Reposti")
+                            try:
+                                post.reply(
+                                           """
+                                           **General Reposti!**
+                                           - If I'm wrong, please downvote me -> Any reposts falsely downvoted will be added to the "naughty list"
+                                           - If I'm right, please upvote me
+                                           I thought it was similar to this: {}. But I'm just a bot. I could be wrong.
+                                           """.format(search_result.url))
+                            except Exception as e:
+                                print("F&%!ing Rate Limit")
+                            # -> That's a bluff, I don't have a naughty list
+                            print("""
+                            Repost Found:
+                            |
+                            |   url: {}
+                            |   author: {}
+                            |   image url: {}
+                            |   similar to: {}
+                            |
+                            """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
+                        continue
                 if not found:
                     post_images.append(post.url)
                     print(post.url)
                     app.inputs.create_image(ClImage(url=post.url))
                     f.write(post.url+"\n")
-        except Exception as e:
-            print(e)
+        except prawcore.RequestException as e:
+            """
+            --------------
+            Reddit Connection blocked
+            --------------
+            """
+        except TypeError:
+            """
+            ---------------
+            Not a text post
+            ---------------
+            """
     f.close()
-batch_size = round(len(post_images/10))
-current_batch, counter, image_count = [0]*3
-images = [url.strip() for url in post_images]
-image_count = len(post_images)
-
-# I'll admit... this next part was fetched from the Clarifai documentation
-"""
-while counter < image_count:
-    imageList = []
-
-    for current_index in range(counter, counter+batch_size - 1):
-        try:
-            imageList.append(ClImage(url=images[current_index]))
-        except IndexError:
-            break
-
-    app.inputs.bulk_create_images(imageList)
-
-    counter = counter + batch_size
-    current_batch += 1
-red.__exit__()
-"""
+pickle.dump({
+    "date": datetime.datetime.now(),
+    "size": len(post_images),
+    "posts": post_images
+}, open("settings.reddit", "rb"))
