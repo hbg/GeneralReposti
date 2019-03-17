@@ -1,10 +1,12 @@
-from flask import Flask
-from config import credentials as cred
+import datetime
+import pickle
+import praw
+import prawcore
 import requests
-from clarifai.rest import Image as ClImage
 from clarifai.rest import ClarifaiApp
-import praw, time, prawcore, pickle, datetime
+from clarifai.rest import Image as ClImage
 
+from config import credentials as cred
 
 app = ClarifaiApp(api_key=cred["api_key"])
 
@@ -22,7 +24,7 @@ def reddit_url(s):
     return "https://www.reddit.com/" + s
 
 
-post_images, repost_images = [], []
+post_images = repost_images = []
 
 with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
     '''
@@ -64,6 +66,7 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
     
     
     '''
+    post: praw.reddit.models.Submission
     for post in red.subreddit(input("Subreddit:: ")).new(limit=int(input("Amount :: "))):
         """
         Meme this all you want but a lot of things can go wrong... that's why everything's surrounded by the try/catch block
@@ -74,34 +77,36 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                 found = False
                 search = app.inputs.search_by_image(url=post.url)
                 if len(search) == 0:
-                    """ print("0 search results found.") """
-                for search_result in search:
-                    if search_result.score > 0.90:
-                        found = True
-                        if search_result.url == post.url:
-                            print("Already in DB")
-                        else:
-                            try:
-                                post.reply(
-                                           """
-                                           **General Reposti!**
-                                           - If I'm wrong, please downvote me -> Any reposts falsely downvoted will be added to the "naughty list"
-                                           - If I'm right, please upvote me
-                                           I thought it was similar to this: {}. But I'm just a bot. I could be wrong.
-                                           """.format(search_result.url))
-                            except Exception as e:
-                                print("F&%!ing Rate Limit")
-                            # -> That's a bluff, I don't have a naughty list
-                            print("""
-                            Repost Found:
-                            |
-                            |   url: {}
-                            |   author: {}
-                            |   image url: {}
-                            |   similar to: {}
-                            |
-                            """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
-                        continue
+                    """ print("0 search results found.") -> Converted to if/else to cause program efficiency """
+                else:
+                    for search_result in search:
+                        if search_result.score > 0.95:
+                            found = True
+                            if search_result.url == post.url:
+                                print("Already in DB")
+                            else:
+                                try:
+                                    """
+                                      This is a very bad practice --> Uploads the unique images to Clarifai
+                                      with a batch size of 1. However, it's necessary if we want to actively
+                                      compare values.
+                                    """
+                                    post.reply(
+                                               "**General Reposti!**\n- If I\'m wrong, please downvote me -> Any reposts falsely downvoted will be added to the \"naughty list\"\n- If I\'m right, please upvote me\n- This message may have been sent due to re-uploading.\n-I'm not too good with memes\nI thought it was similar to this: {} (Post: {}). But I'm just a bot. I could be wrong.".format(search_result.url, "https://www.reddit.com/search?q=" + search_result.url))
+                                except Exception as e:
+                                    print("F&%!ing Rate Limit")
+                                # -> That's a bluff, I don't have a naughty list
+                                print("""
+                                Repost Found:
+                                ________________
+                                |
+                                |   url: {}
+                                |   author: {}
+                                |   image url: {}
+                                |   similar to: {}
+                                |
+                                """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
+                            continue
                 if not found:
                     post_images.append(post.url)
                     print(post.url)
@@ -109,15 +114,15 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                     f.write(post.url+"\n")
         except prawcore.RequestException as e:
             """
-            --------------
+            -------------------------
             Reddit Connection blocked
-            --------------
+            -------------------------
             """
         except TypeError:
             """
-            ---------------
-            Not a text post
-            ---------------
+            -------------------------
+                 Not a text post
+            -------------------------
             """
     f.close()
 pickle.dump({
