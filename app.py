@@ -84,6 +84,8 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                             found = True
                             if search_result.url == post.url:
                                 print("Already in DB")
+                            elif search_result.author.name == post.author.name:
+                                print("User re-uploaded his/her own content")
                             else:
                                 try:
                                     """
