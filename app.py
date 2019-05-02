@@ -84,8 +84,8 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                             found = True
                             if search_result.url == post.url:
                                 print("Already in DB")
-                            elif search_result.author.name == post.author.name:
-                                print("User re-uploaded his/her own content")
+                            # elif search_result.author.name == post.author.name:
+                            #    print("User re-uploaded his/her own content")
                             else:
                                 try:
                                     """
@@ -94,7 +94,7 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                                       compare values.
                                     """
                                     post.reply(
-                                               "**General Reposti!**\n- If I\'m wrong, please downvote me -> Any reposts falsely downvoted will be added to the \"naughty list\"\n- If I\'m right, please upvote me\n- This message may have been sent due to re-uploading.\n-I'm not too good with memes\nI thought it was similar to this: {} (Post: {}). But I'm just a bot. I could be wrong.".format(search_result.url, "https://www.reddit.com/search?q=" + search_result.url))
+                                              '''**General Reposti!**\n- If I\'m wrong, please downvote me -> Any reposts falsely downvoted will be added to the \"naughty list\"\n- If I\'m right, please upvote me\n- This message may have been sent due to re-uploading.\n- I'm not too good with memes\n- I thought it was similar to this: {} (Post: {}). But I'm just a bot. I could be wrong.'''.format(search_result.url, "https://www.reddit.com/search?q=" + search_result.url))
                                 except Exception as e:
                                     print("F&%!ing Rate Limit")
                                 # -> That's a bluff, I don't have a naughty list
@@ -107,6 +107,7 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                                 |   image url: {}
                                 |   similar to: {}
                                 |
+                                |_______________
                                 """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
                             continue
                 if not found:
@@ -131,4 +132,4 @@ pickle.dump({
     "date": datetime.datetime.now(),
     "size": len(post_images),
     "posts": post_images
-}, open("settings.reddit", "rb"))
+}, open("settings.reddit", "w+"))
