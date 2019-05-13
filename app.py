@@ -9,8 +9,7 @@ from clarifai.rest import Image as ClImage
 from config import credentials as cred
 
 app = ClarifaiApp(api_key=cred["api_key"])
-
-#   flask_app = Flask(__name__)
+threshold = 0.95
 red = praw.Reddit(
     username=cred["username"],
     password=cred["password"],
@@ -18,12 +17,21 @@ red = praw.Reddit(
     client_secret=cred["client_secret"],
     user_agent=cred["user_agent"]
 )
-
-
+def get_downvotes():
+    u = red.redditor('generalrepostbot')
+    for comment in u.comments.new(limit=None):
+        print(comment.permalink)
+        comment.refresh()
+        for reply in comment.replies:
+            if ("BAD" in reply.body.upper() and "BOT" in reply.body.upper()):
+                print("I was not a good bot today")
+                comment.delete()
+get_downvotes()
 def reddit_url(s):
     return "https://www.reddit.com/" + s
 
-
+with open("settings.reddit", "rb") as f:
+    print(pickle.load(f))
 post_images = repost_images = []
 
 with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
@@ -64,10 +72,11 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
     
     
     
-    
+    Future Plan: Add 'anti-repost' which takes memes in from r/dankmemes, r/memes, and r/prequelmemes to
+    find meme formats (which it currently identifies as reposts)
     '''
     post: praw.reddit.models.Submission
-    for post in red.subreddit(input("Subreddit:: ")).new(limit=int(input("Amount :: "))):
+    for post in red.subreddit(input("Subreddit :: ")).new(limit=int(input("Amount :: "))):
         """
         Meme this all you want but a lot of things can go wrong... that's why everything's surrounded by the try/catch block
         """
@@ -76,16 +85,12 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
             if "image" in response.headers.get('content-type'):
                 found = False
                 search = app.inputs.search_by_image(url=post.url)
-                if len(search) == 0:
-                    """ print("0 search results found.") -> Converted to if/else to cause program efficiency """
-                else:
+                if len(search) is not 0:
                     for search_result in search:
-                        if search_result.score > 0.95:
+                        if search_result.score > threshold:
                             found = True
                             if search_result.url == post.url:
                                 print("Already in DB")
-                            # elif search_result.author.name == post.author.name:
-                            #    print("User re-uploaded his/her own content")
                             else:
                                 try:
                                     """
@@ -94,9 +99,10 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                                       compare values.
                                     """
                                     post.reply(
-                                              '''**General Reposti!**\n- If I\'m wrong, please downvote me -> Any reposts falsely downvoted will be added to the \"naughty list\"\n- If I\'m right, please upvote me\n- This message may have been sent due to re-uploading.\n- I'm not too good with memes\n- I thought it was similar to this: {} (Post: {}). But I'm just a bot. I could be wrong.'''.format(search_result.url, "https://www.reddit.com/search?q=" + search_result.url))
+                                              '''**General Reposti!**\n- If I\'m wrong, please downvote me -> Any reposts falsely downvoted will be added to the \"naughty list\"\n- If I\'m right, please upvote me\n- This message may have been sent due to re-uploading.\n- I'm not too good with memes, but\n- I thought it was similar to this: {} (Post: {}). But I'm just a bot. I could be wrong.'''.format(search_result.url, "https://www.reddit.com/search?q=" + search_result.url))
+                                    
                                 except Exception as e:
-                                    print("F&%!ing Rate Limit")
+                                    print("F&%!ing Rate Limit:" + e)
                                 # -> That's a bluff, I don't have a naughty list
                                 print("""
                                 Repost Found:
@@ -111,17 +117,19 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                                 """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
                             continue
                 if not found:
+                    print("OC: " + post.url) # OC Badge
                     post_images.append(post.url)
-                    print(post.url)
                     app.inputs.create_image(ClImage(url=post.url))
                     f.write(post.url+"\n")
         except prawcore.RequestException as e:
+            print("Connection couldn't be established")
             """
             -------------------------
             Reddit Connection blocked
             -------------------------
             """
         except TypeError:
+            print("The post given isn't a textpost")
             """
             -------------------------
                  Not a text post
@@ -129,7 +137,7 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
             """
     f.close()
 pickle.dump({
-    "date": datetime.datetime.now(),
+    "date": str(datetime.datetime.strftime("%m,%d,%Y,%H,%M,%S")),
     "size": len(post_images),
     "posts": post_images
-}, open("settings.reddit", "w+"))
+}, open("settings.reddit", "wb"))
