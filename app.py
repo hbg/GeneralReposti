@@ -1,44 +1,41 @@
 import datetime
 import pickle
-import praw
-import prawcore
+import praw, prawcore
 import requests
-from clarifai.rest import ClarifaiApp
-from clarifai.rest import Image as ClImage
-
+from clarifai.rest import ClarifaiApp, Image as ClImage
+import clarifai
 from config import credentials as cred
 
 app = ClarifaiApp(api_key=cred["api_key"])
-threshold = 0.95
-red = praw.Reddit(
-    username=cred["username"],
-    password=cred["password"],
-    client_id=cred["client_id"],
-    client_secret=cred["client_secret"],
-    user_agent=cred["user_agent"]
-)
+threshold = 0.975
+amount = 15    # Scans 15 posts for now, but later it will be asynchronous
+red = praw.Reddit(**cred)
+
 def get_downvotes():
+    """Check downvotes count for all posts"""
     u = red.redditor('generalrepostbot')
     for comment in u.comments.new(limit=None):
         print(comment.permalink)
         comment.refresh()
+        if comment.score <= 0: comment.delete()
         for reply in comment.replies:
             if ("BAD" in reply.body.upper() and "BOT" in reply.body.upper()):
                 print("I was not a good bot today")
                 comment.delete()
 get_downvotes()
 def reddit_url(s):
+    """Get converted Reddit URL"""
     return "https://www.reddit.com/" + s
 
 with open("settings.reddit", "rb") as f:
     print(pickle.load(f))
 post_images = repost_images = []
 
-with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
-    '''
+with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
+    r'''
     
     
-        Sense a disturbance in Reddit, I have
+        Sense a disturbance in Reddit, I have...
                         ____
                      _.' :  `._
                  .-.'`.  ;   .'`.-.
@@ -74,9 +71,15 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
     
     Future Plan: Add 'anti-repost' which takes memes in from r/dankmemes, r/memes, and r/prequelmemes to
     find meme formats (which it currently identifies as reposts)
+
+    This is how it'll work (pseudocode obv)
+    if not is_meme(image_url):
+        do {everything}
     '''
     post: praw.reddit.models.Submission
-    for post in red.subreddit(input("Subreddit :: ")).new(limit=int(input("Amount :: "))):
+    posts = list(red.subreddit('memes').new(limit=threshold)
+    posts.reverse()
+    for post in posts:
         """
         Meme this all you want but a lot of things can go wrong... that's why everything's surrounded by the try/catch block
         """
@@ -85,10 +88,12 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
             if "image" in response.headers.get('content-type'):
                 found = False
                 search = app.inputs.search_by_image(url=post.url)
+                max_value = 0
                 if len(search) is not 0:
                     for search_result in search:
                         if search_result.score > threshold:
                             found = True
+                            max_value = search_result.score
                             if search_result.url == post.url:
                                 print("Already in DB")
                             else:
@@ -117,27 +122,34 @@ with open('posts.txt', 'a+') as f:  # I'll use a Pickle file in the future
                                 """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
                             continue
                 if not found:
-                    print("OC: " + post.url) # OC Badge
+                    print("OC: " + post.url + str(max_value)) # OC Badge
                     post_images.append(post.url)
                     app.inputs.create_image(ClImage(url=post.url))
-                    f.write(post.url+"\n")
+                f.write("{},{}\n".format(post.url, max_value))
         except prawcore.RequestException as e:
             print("Connection couldn't be established")
             """
+            -----------------------------
+            | Reddit Connection blocked |
+            -----------------------------
+            """
+        except TypeError as e:
+            print("The post given is a textpost")
+            """
             -------------------------
-            Reddit Connection blocked
+            |    Is a text post     |
             -------------------------
             """
-        except TypeError:
-            print("The post given isn't a textpost")
+        except clarifai.errors.ApiError:
+            print("Failed uploading")
             """
-            -------------------------
-                 Not a text post
-            -------------------------
+            ---------------------------------------
+            |   Most likely due to GIF content    |
+            ---------------------------------------
             """
     f.close()
 pickle.dump({
-    "date": str(datetime.datetime.strftime("%m,%d,%Y,%H,%M,%S")),
+    "date": str(datetime.datetime.now().strftime("%m,%d,%Y,%H,%M,%S")),
     "size": len(post_images),
     "posts": post_images
 }, open("settings.reddit", "wb"))
