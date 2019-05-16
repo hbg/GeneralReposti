@@ -5,12 +5,13 @@ import requests
 from clarifai.rest import ClarifaiApp, Image as ClImage
 import clarifai
 from config import credentials as cred
-
+from MemeMachine import Classifier
 app = ClarifaiApp(api_key=cred["api_key"])
 threshold = 0.975
 amount = 15    # Scans 15 posts for now, but later it will be asynchronous
 red = praw.Reddit(**cred)
-
+meme_identifier = Classifier()
+# meme_identifier.add_memes()
 def get_downvotes():
     """Check downvotes count for all posts"""
     u = red.redditor('generalrepostbot')
@@ -71,13 +72,10 @@ with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
     
     Future Plan: Add 'anti-repost' which takes memes in from r/dankmemes, r/memes, and r/prequelmemes to
     find meme formats (which it currently identifies as reposts)
-
-    This is how it'll work (pseudocode obv)
-    if not is_meme(image_url):
-        do {everything}
+    --> Working on this now, currently have 220 meme formats.
     '''
     post: praw.reddit.models.Submission
-    posts = list(red.subreddit('memes').new(limit=threshold)
+    posts = list(red.subreddit('memes').new(limit=threshold))
     posts.reverse()
     for post in posts:
         """
@@ -91,7 +89,7 @@ with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
                 max_value = 0
                 if len(search) is not 0:
                     for search_result in search:
-                        if search_result.score > threshold:
+                        if search_result.score >= threshold:
                             found = True
                             max_value = search_result.score
                             if search_result.url == post.url:
@@ -121,10 +119,12 @@ with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
                                 |_______________
                                 """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
                             continue
-                if not found:
-                    print("OC: " + post.url + str(max_value)) # OC Badge
+                meme = meme_identifier.is_meme(post.url)
+                if not found and not meme:
+                    print("OC: " + post.url + " Score: " + str(max_value)) # OC Badge
                     post_images.append(post.url)
                     app.inputs.create_image(ClImage(url=post.url))
+                if meme: print("I thought this was a meme: " + post.url) 
                 f.write("{},{}\n".format(post.url, max_value))
         except prawcore.RequestException as e:
             print("Connection couldn't be established")
