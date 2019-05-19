@@ -4,14 +4,6 @@ from clarifai.rest import ClarifaiApp, Image as ClImage
 from config import meme_credentials, credentials as cred
 
 class Classifier():
-    def __init__(self):
-        app = ClarifaiApp(api_key=meme_credentials)
-        """
-        search = app.inputs.search_by_image(url=url)
-        self.count = 0
-        for search_result in search:
-            if search_result.score >= threshold: self.count+=1
-        """
     def is_meme(self, url):
         app = ClarifaiApp(api_key=meme_credentials)
         search = app.inputs.search_by_image(url=url)
@@ -19,6 +11,7 @@ class Classifier():
             if search_result.score >= 0.95:
                 print("Meme found: " + search_result.url)
                 return True
+        return False
     def get_template(self, url):
         app = ClarifaiApp(api_key=meme_credentials)
         search = app.inputs.search_by_image(url=url)
