@@ -2,24 +2,27 @@ import datetime
 import pickle
 import praw, prawcore
 import requests
+import time
 from clarifai.rest import ClarifaiApp, Image as ClImage
 import clarifai
 from config import credentials as cred
 from MemeMachine import Classifier
 app = ClarifaiApp(api_key=cred["api_key"])
 threshold = 0.975
-amount = 15    # Scans 15 posts for now, but later it will be asynchronous
+meme_threshold = 0.99
+amount = 1000    # Scans 15 posts for now, but later it will be asynchronous
 red = praw.Reddit(**cred)
 meme_identifier = Classifier()
 # meme_identifier.add_memes()
 def get_downvotes():
     """Check downvotes count for all posts"""
     u = red.redditor('generalrepostbot')
-    for comment in u.comments.new(limit=None):
+    for comment in u.comments.top(limit=None):
         print(comment.permalink)
         comment.refresh()
         if comment.score <= 0: comment.delete()
         for reply in comment.replies:
+            print("|----> Comment: {}".format(reply.body))
             if ("BAD" in reply.body.upper() and "BOT" in reply.body.upper()):
                 print("I was not a good bot today")
                 comment.delete()
@@ -75,7 +78,7 @@ with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
     --> Working on this now, currently have 220 meme formats.
     '''
     post: praw.reddit.models.Submission
-    posts = list(red.subreddit('memes').new(limit=threshold))
+    posts = list(red.subreddit('memes').new(limit=amount))
     posts.reverse()
     for post in posts:
         """
@@ -102,7 +105,7 @@ with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
                                       compare values.
                                     """
                                     post.reply(
-                                              '''**General Reposti!**\n- If I\'m wrong, please downvote me -> Any reposts falsely downvoted will be added to the \"naughty list\"\n- If I\'m right, please upvote me\n- This message may have been sent due to re-uploading.\n- I'm not too good with memes, but\n- I thought it was similar to this: {} (Post: {}). But I'm just a bot. I could be wrong.'''.format(search_result.url, "https://www.reddit.com/search?q=" + search_result.url))
+                                              '''**General Reposti!**\n- If I\'m wrong, please downvote me -> Any reposts falsely downvoted will be added to the \"naughty list\"\n- If I\'m right, please upvote me\n- This message may have been sent due to re-uploading.\n- I'm not too good with memes, but I thought it was similar to this: {} (Post: {}). But I'm just a bot. I could be wrong.'''.format(search_result.url, "https://www.reddit.com/search?q=url:" + search_result.url))
                                     
                                 except Exception as e:
                                     print("F&%!ing Rate Limit:" + e)
@@ -120,12 +123,19 @@ with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
                                 """.format(post.url, post.author, reddit_url(post.permalink), search_result.url))
                             continue
                 meme = meme_identifier.is_meme(post.url)
-                if not found and not meme:
-                    print("OC: " + post.url + " Score: " + str(max_value)) # OC Badge
-                    post_images.append(post.url)
-                    app.inputs.create_image(ClImage(url=post.url))
-                if meme: print("I thought this was a meme: " + post.url) 
-                f.write("{},{}\n".format(post.url, max_value))
+                safety_rating = True
+                if not found or meme and max_value >= meme_threshold:
+                    safety_rating = meme_identifier.is_safe(post.url)
+                    print("OC: " + post.url + " Score: " + str(max_value) + ". Safe? " + str(safety_rating)) # OC Badge
+                    if safety_rating:
+                        post_images.append(post.url)
+                        app.inputs.create_image(ClImage(url=post.url))
+                    else:
+                        print("NSFW post... that's nasty")
+                if meme:
+                    print("I thought this was a meme: " + post.url)
+                    post.reply("Nice meme! I see you used this format: {}. I'm on a hunt to find OC (as a bot, of course) and deemed your meme original content. If you want this comment deleted, please reply \"BAD BOT.\" ".format(meme_identifier.get_template(post.url))) 
+                f.write("{},{},{}\n".format(post.url, max_value, safety_rating))
         except prawcore.RequestException as e:
             print("Connection couldn't be established")
             """
@@ -133,7 +143,11 @@ with open('posts.csv', 'a+') as f:  # I'll use a Pickle file in the future
             | Reddit Connection blocked |
             -----------------------------
             """
+        except praw.exceptions.APIException:
+            print("Rate limit for Reddit reached. Will wait 10 minutes.")
+            time.sleep(600)
         except TypeError as e:
+            print(e)
             print("The post given is a textpost")
             """
             -------------------------

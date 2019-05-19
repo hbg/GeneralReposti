@@ -16,10 +16,23 @@ class Classifier():
         app = ClarifaiApp(api_key=meme_credentials)
         search = app.inputs.search_by_image(url=url)
         for search_result in search:
-            if search_result.score >= 0.85:
+            if search_result.score >= 0.95:
                 print("Meme found: " + search_result.url)
                 return True
+    def get_template(self, url):
+        app = ClarifaiApp(api_key=meme_credentials)
+        search = app.inputs.search_by_image(url=url)
+        for search_result in search:
+            if search_result.score >= 0.95:
+                return search_result.url
+        return
+    def is_safe(self, url):
+        app = ClarifaiApp(api_key=meme_credentials)
+        model = app.public_models.nsfw_model
+        rating = model.predict_by_url(url)["outputs"][0]["data"]['concepts'][0]['value']
+        if rating >= 0.97: return True
         return False
+
     def add_memes(self):
         red = praw.Reddit(**cred)
         app = ClarifaiApp(api_key=meme_credentials)
