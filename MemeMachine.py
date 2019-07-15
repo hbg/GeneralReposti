@@ -23,8 +23,7 @@ class Classifier():
         app = ClarifaiApp(api_key=meme_credentials)
         model = app.public_models.nsfw_model
         rating = model.predict_by_url(url)["outputs"][0]["data"]['concepts'][0]['value']
-        if rating >= 0.97: return True
-        return False
+        return rating >= 0.97
 
     def add_memes(self):
         red = praw.Reddit(**cred)
